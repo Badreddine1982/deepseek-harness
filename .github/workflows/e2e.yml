@@ -79,11 +79,19 @@ jobs:
       - name: Install (immutable)
         run: pnpm install --frozen-lockfile
 
-      # The with-key escalation e2e self-skips without a usable runner. Prepare
-      # bwrap so trusted CI exercises it; the functional probe remains the
-      # authority on whether the runner can use the sandbox.
+      # Install the runner's distro package instead of downloading a pinned
+      # .deb from the Ubuntu archive (the old package URL returned HTTP 404).
+      # Keep the functional probe as the authority on whether the runner can
+      # actually use the sandbox.
       - name: Prepare bubblewrap (unrestrict userns)
-        run: bash scripts/prepare-ci-bubblewrap.sh
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \
+            || echo 'apparmor userns knob absent — the functional probe decides'
+          bwrap --version
+          bwrap --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent -- true
 
       # Guard against a false green: the e2e suites self-skip when the key is
       # absent, so a missing/misconfigured secret would otherwise pass as
